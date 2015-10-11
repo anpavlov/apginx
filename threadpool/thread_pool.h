@@ -7,10 +7,10 @@
 
 #include <pthread.h>
 #include <event2/buffer.h>
-#include "job_queue.h"
 
 typedef struct thread_ thread;
 typedef struct thread_pool_ thread_pool;
+typedef struct job_queue_ job_queue;
 
 struct thread_pool_ {
     thread** threads;

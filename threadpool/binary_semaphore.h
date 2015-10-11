@@ -7,6 +7,12 @@
 
 typedef struct bin_sem_ bin_sem;
 
+struct bin_sem_ {
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+    int value;
+};
+
 void bin_sem_init(bin_sem *bsem); // should(?) be (sem, int) to init with 1 or 0
 //void bin_sem_reset(bin_sem* bsem); // to 0
 void bin_sem_post(bin_sem *bsem); // notify at least 1 thread
