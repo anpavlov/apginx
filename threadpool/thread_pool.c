@@ -5,6 +5,8 @@
 #include "job.h"
 #include "binary_semaphore.h"
 #include <stdlib.h>
+#include <event2/buffer.h>
+#include <event2/event.h>
 
 #include "thread_pool.h"
 
@@ -26,6 +28,10 @@ static int threads_alive;
 
 static int thread_init(thread_pool *thpool, int id);
 static void thread_do(thread *thrd);
+
+static void echo_read_cb(struct bufferevent* buf_ev, void* thpool);
+static void echo_write_cb(struct bufferevent *buf_ev, void *thpool);
+static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg);
 
 // could pass queue instead of thread pool, not done for less work w/ **queue
 static int job_queue_init(thread_pool *thpool);
@@ -83,7 +89,7 @@ thread_pool *thread_pool_init(int num_threads) {
     return thpool;
 }
 
-int thread_pool_add_work(thread_pool *thpool, struct evbuffer *input, struct evbuffer *output) {
+int thread_pool_add_work(thread_pool *thpool, struct bufferevent *incoming_bufev, int type) {
     job *newjob;
     newjob = (job*)malloc(sizeof(job));
     if (!newjob) {
@@ -91,8 +97,8 @@ int thread_pool_add_work(thread_pool *thpool, struct evbuffer *input, struct evb
         return -1;
     }
 
-    newjob->inputbuf = input;
-    newjob->outputbuf = output;
+    newjob->bufev = incoming_bufev;
+    newjob->type = type;
 
     pthread_mutex_lock(&thpool->queue->queue_mutex);
     job_queue_push(thpool, newjob);
@@ -136,8 +142,30 @@ void thread_do(thread *thrd) {
             pthread_mutex_unlock(&thpool->queue->queue_mutex);
             if (curjob) {
 
-                evbuffer_add_buffer(curjob->outputbuf, curjob->inputbuf);
-//                TODO: do some work with job
+                switch (curjob->type) {
+                    case JOB_TYPE_NEW:
+                        bufferevent_lock(curjob->bufev);
+                        bufferevent_setcb(curjob->bufev, echo_read_cb, echo_write_cb, NULL, thpool);
+                        bufferevent_enable(curjob->bufev, EV_READ);
+                        bufferevent_unlock(curjob->bufev);
+                        break;
+
+                    case JOB_TYPE_DATA:
+                        bufferevent_lock(curjob->bufev);
+//                        struct evbuffer* buf_input = bufferevent_get_input(curjob->bufev);
+                        struct evbuffer* buf_output = bufferevent_get_output(curjob->bufev);
+
+
+
+                        evbuffer_add_printf(buf_output, "HTTP/1.1 200 OK");
+                        bufferevent_unlock(curjob->bufev);
+                        break;
+
+                    default:
+//                        something wrong
+                        break;
+                }
+
                 free(curjob);
             }
         }
@@ -211,4 +239,18 @@ job *job_queue_pull(thread_pool *thpool) {
     }
 
     return pulledjob;
+}
+
+// =========== CALLBACKS ==============
+
+static void echo_read_cb(struct bufferevent* buf_ev, void* thpool) {
+    thread_pool_add_work((thread_pool*)thpool, buf_ev, JOB_TYPE_DATA);
+}
+
+static void echo_write_cb(struct bufferevent *buf_ev, void *thpool) {
+    bufferevent_free(buf_ev);
+}
+
+static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg) {
+
 }

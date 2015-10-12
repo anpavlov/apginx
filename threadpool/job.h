@@ -5,16 +5,19 @@
 #ifndef APGINX_JOB_H
 #define APGINX_JOB_H
 
-#include <event2/buffer.h>
+#define JOB_TYPE_NEW 0
+#define JOB_TYPE_DATA 1
+
+#include <event2/bufferevent.h>
 
 typedef struct job_ job;
 
 struct job_ {
     job *prev;
-    struct evbuffer *inputbuf;
-    struct evbuffer *outputbuf;
+    int type;
+    struct bufferevent *bufev;
+//    struct evbuffer *inputbuf;
 //    some info (socket, buffer)
-//TODO: job fields
 };
 
 #endif //APGINX_JOB_H

@@ -6,7 +6,7 @@
 #define APGINX_THREAD_POOL_H
 
 #include <pthread.h>
-#include <event2/buffer.h>
+#include <event2/bufferevent.h>
 
 typedef struct thread_ thread;
 typedef struct thread_pool_ thread_pool;
@@ -21,7 +21,7 @@ struct thread_pool_ {
 };
 
 thread_pool* thread_pool_init(int num_threads);
-int thread_pool_add_work(thread_pool* thpool, struct evbuffer *input, struct evbuffer *output);
+int thread_pool_add_work(thread_pool* thpool, struct bufferevent *incoming_bufev, int type);
 
 
 #endif //APGINX_THREAD_POOL_H
