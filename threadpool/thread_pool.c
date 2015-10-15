@@ -4,8 +4,8 @@
 
 #include "job.h"
 #include "binary_semaphore.h"
+#include "http.h"
 #include <stdlib.h>
-#include <event2/buffer.h>
 #include <event2/event.h>
 
 #include "thread_pool.h"
@@ -29,9 +29,12 @@ static int threads_alive;
 static int thread_init(thread_pool *thpool, int id);
 static void thread_do(thread *thrd);
 
+static int write_file(char *filepath, struct evbuffer *writebuf);
+static int write_header(char *filepath, struct evbuffer *writebuf);
+
 static void echo_read_cb(struct bufferevent* buf_ev, void* thpool);
 static void echo_write_cb(struct bufferevent *buf_ev, void *thpool);
-static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg);
+//static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg);
 
 // could pass queue instead of thread pool, not done for less work w/ **queue
 static int job_queue_init(thread_pool *thpool);
@@ -152,13 +155,22 @@ void thread_do(thread *thrd) {
 
                     case JOB_TYPE_DATA:
                         bufferevent_lock(curjob->bufev);
-//                        struct evbuffer* buf_input = bufferevent_get_input(curjob->bufev);
+                        struct evbuffer* buf_input = bufferevent_get_input(curjob->bufev);
                         struct evbuffer* buf_output = bufferevent_get_output(curjob->bufev);
 
+//                        get first line of input
+                        char *line = evbuffer_readln(buf_input, NULL, EVBUFFER_EOL_CRLF);
 
+//                        create temp buffer for write
+                        struct evbuffer *tempbuf = evbuffer_new();
+//                        evbuffer_add_printf(buf_output, "HTTP/1.1 200 OK\n");
 
-                        evbuffer_add_printf(buf_output, "HTTP/1.1 200 OK");
+                        handle_request(tempbuf, line);
+
+                        evbuffer_add_buffer(buf_output, tempbuf);
                         bufferevent_unlock(curjob->bufev);
+                        evbuffer_free(tempbuf);
+                        free(line);
                         break;
 
                     default:
@@ -251,6 +263,6 @@ static void echo_write_cb(struct bufferevent *buf_ev, void *thpool) {
     bufferevent_free(buf_ev);
 }
 
-static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg) {
-
-}
+//static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg) {
+//
+//}
