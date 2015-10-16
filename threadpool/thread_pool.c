@@ -14,6 +14,7 @@ struct thread_ {
 //    int id;
     pthread_t pthread;
     thread_pool *thpool;
+    long long count;
 };
 
 struct job_queue_ {
@@ -121,6 +122,7 @@ int thread_init(thread_pool *thpool, int id) {
     thpool->threads[id] = curthread;
 
     curthread->thpool = thpool;
+    curthread->count = 0;
 
     pthread_create(&curthread->pthread, NULL, (void*)thread_do, curthread);
     pthread_detach(curthread->pthread);
@@ -180,6 +182,7 @@ void thread_do(thread *thrd) {
 
                 free(curjob);
             }
+            ++thrd->count;
         }
     }
 
