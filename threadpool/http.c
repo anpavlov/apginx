@@ -2,6 +2,9 @@
 // Created by an.pavlov on 15.10.15.
 //
 
+// TODO: content type
+// TODO: head request
+
 #include "http.h"
 #include <string.h>
 #include <fcntl.h>
@@ -22,6 +25,7 @@
 
 typedef struct response_info {
     char *path;
+    const char *type;
     int method;
     int size;
 } response_info;
@@ -31,9 +35,10 @@ static void free_resp(response_info *resp);
 
 static inline int is_hex(int x);
 static size_t decode(char *url, size_t len, char *dest);
+static const char *guess_type(char *path, size_t len);
 static void file_info(response_info *resp);
 
-static void add_headers(struct evbuffer *buf, char *code, char *type, int len);
+static void add_headers(struct evbuffer *buf, char *code, const char *type, int len);
 static void handle_get(response_info *resp, struct evbuffer *buf);
 static void handle_head(response_info *resp, struct evbuffer *writebuf);
 
@@ -96,7 +101,7 @@ static response_info *resp_init(char *line) {
     }
 
     char *protocol = strtok(NULL, " ");
-    if (protocol == NULL || strcmp(protocol, "HTTP/1.1") != 0) {
+    if (protocol == NULL || strcmp(protocol, "HTTP/1.1") != 0 && strcmp(protocol, "HTTP/1.0")) {
         resp->method = PARSE_LINE_RET_BAD;
         return resp;
     }
@@ -122,7 +127,7 @@ static inline int is_hex(int x) {
 
 static size_t decode(char *url, size_t len, char *dest) {
     char *out;
-    char *end = url + strlen(url);
+    char *end = url + len;
     int ch;
 
     for (out = dest; url <= end;) {
@@ -145,8 +150,31 @@ static size_t decode(char *url, size_t len, char *dest) {
         }
     }
 
-    *out = 0;
+//    if (out) {
+//        *out = 0;
+//    }
     return out - dest - 1;
+}
+
+static const char *guess_type(char *path, size_t len) {
+    char *ending = path + len;
+    if (strcmp(ending - 5, ".html") == 0) {
+        return "text/html";
+    } else if (strcmp(ending - 4, ".css") == 0) {
+        return "text/css";
+    } else if (strcmp(ending - 3, ".js") == 0) {
+        return "application/javascript";
+    } else if (strcmp(ending - 4, ".png") == 0) {
+        return "image/png";
+    } else if (strcmp(ending - 4, ".gif") == 0) {
+        return "image/gif";
+    } else if (strcmp(ending - 4, ".swf") == 0) {
+        return "application/x-shockwave-flash";
+    } else if (strcmp(ending - 4, ".jpg") == 0 || strcmp(ending - 5, ".jpeg") == 0) {
+        return "image/jpeg";
+    } else {
+        return "application/octet-stream";
+    }
 }
 
 // декод url (%, / в конце) + полный путь + ограничение по папке
@@ -160,11 +188,10 @@ static void file_info(response_info *resp) {
     len = decode(resp->path, len, decoded);
 
     len += DOC_ROOT_LEN;
-    len += 1;
     if (is_folder == 1) {
         len += DOC_INDEX_LEN;
     }
-    char *fullpath = (char*)malloc(len);
+    char *fullpath = (char*)malloc(len + 100);
     strcpy(fullpath, DOC_ROOT);
     strcat(fullpath, decoded);
     if (is_folder == 1) {
@@ -177,6 +204,7 @@ static void file_info(response_info *resp) {
     struct stat s;
     if (stat(fullpath, &s) == 0) {
         resp->size = (int)(s.st_size);
+        resp->type = guess_type(fullpath, len);
     } else if (is_folder == 1) {
         resp->size = -2;
     } else {
@@ -191,7 +219,7 @@ static void free_resp(response_info *resp) {
     free(resp);
 }
 
-static void add_headers(struct evbuffer *buf, char *code, char *type, int len) {
+static void add_headers(struct evbuffer *buf, char *code, const char *type, int len) {
     char date[32];
     time_t now = time(0);
     struct tm tm = *gmtime(&now);
@@ -203,13 +231,13 @@ static void add_headers(struct evbuffer *buf, char *code, char *type, int len) {
 
 static void handle_get(response_info *resp, struct evbuffer *buf) {
 
+    add_headers(buf, "200 OK", resp->type, resp->size);
     int fd = open(resp->path, O_RDONLY);
-    add_headers(buf, "200 OK", "text/html", resp->size);
     evbuffer_add_file(buf, fd, 0, resp->size);
 
 }
 
-static void handle_head(response_info *resp, struct evbuffer *writebuf) {
-
+static void handle_head(response_info *resp, struct evbuffer *buf) {
+    add_headers(buf, "200 OK", resp->type, resp->size);
 }
 

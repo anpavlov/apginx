@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 project(apginx)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g")
 
 set(SOURCE_FILES main.c threadpool/thread_pool.c threadpool/thread_pool.h threadpool/binary_semaphore.c threadpool/binary_semaphore.h threadpool/job.h threadpool/http.c threadpool/http.h)
 add_executable(apginx ${SOURCE_FILES})

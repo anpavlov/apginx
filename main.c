@@ -32,7 +32,7 @@ int main() {
     struct sockaddr_in sin;
     int port = 80;
 
-    thread_pool* thpool = thread_pool_init(4);
+    thread_pool* thpool = thread_pool_init(1);
 
     base = event_base_new();
     if (!base) {
@@ -76,7 +76,7 @@ static void accept_connection_cb(struct evconnlistener* listener, evutil_socket_
 
 static void accept_error_cb(struct evconnlistener* listener, void* arg) {
     struct event_base* base = evconnlistener_get_base(listener);
-    int error = EVUTIL_SOCKET_ERROR();
+//    int error = EVUTIL_SOCKET_ERROR();
 //    cout << "Erorr " << error << " (" << evutil_socket_error_to_string(error) <<"). Quiting" << endl;
     event_base_loopexit(base, NULL);
 }

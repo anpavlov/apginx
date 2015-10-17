@@ -30,8 +30,8 @@ static int threads_alive;
 static int thread_init(thread_pool *thpool, int id);
 static void thread_do(thread *thrd);
 
-static int write_file(char *filepath, struct evbuffer *writebuf);
-static int write_header(char *filepath, struct evbuffer *writebuf);
+//static int write_file(char *filepath, struct evbuffer *writebuf);
+//static int write_header(char *filepath, struct evbuffer *writebuf);
 
 static void echo_read_cb(struct bufferevent* buf_ev, void* thpool);
 static void echo_write_cb(struct bufferevent *buf_ev, void *thpool);
