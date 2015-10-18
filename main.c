@@ -2,76 +2,138 @@
 // Created by an.pavlov on 11.10.15.
 //
 
-//#include <iostream>
-#include <errno.h>
 #include <event2/listener.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 #include <event2/thread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <unistd.h>
 
 #include "threadpool/thread_pool.h"
 #include "threadpool/job.h"
 
-//using namespace std;
+typedef struct arguments {
+    int port;
+    int ncpu;
+    int is_help;
+    char *doc_root;
+} arguments;
+
+static int init_server(arguments *args);
+static arguments *parse_args(int argc, char **argv);
+static void int_handler(int sig);
 
 static void accept_connection_cb(struct evconnlistener* listener, evutil_socket_t fd, struct sockaddr* addr, int sock_len, void* thpool);
 static void accept_error_cb(struct evconnlistener* listener, void* arg);
-//static void echo_read_cb(struct bufferevent* buf_ev, void* thpool);
-//static void echo_write_cb(struct bufferevent *buf_ev, void *thpool);
-//static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg);
 
+static struct event_base* base;
 
-int main() {
-//    TODO: check for 0
-    evthread_use_pthreads();
+int main(int argc, char **argv) {
+    arguments *args = parse_args(argc, argv);
+    if (!args) {
+//       TODO: print wrong parameters and suggest help
+        return 0;
+    }
+    if (args->is_help == 1) {
+//       TODO: print help
+        return 0;
+    }
+    if (args->port < 1 || args->port > 65535) {
+//        TODO: print error
+        return 0;
+    }
+    if (args->ncpu < 1 || args->ncpu > 65535) {
+//        TODO: print error
+        return 0;
+    }
+    return init_server(args);
+}
 
-    struct event_base* base;
+static arguments *parse_args(int argc, char **argv) {
+    arguments *args = (arguments*)malloc(sizeof(arguments));
+    args->port = 80;
+    args->ncpu = 4;
+    args->doc_root = ".";
+    args->is_help = 0;
+
+    opterr = 0;
+    int res = 0;
+    while ((res = getopt(argc, argv, "p:c:r:")) != -1) {
+        switch (res) {
+            case 'p':
+                args->port = atoi(optarg);
+                break;
+            case 'c':
+                args->ncpu = atoi(optarg);
+                break;
+            case 'r':
+                args->doc_root = optarg;
+                if (args->doc_root[strlen(args->doc_root) - 1] == '/') {
+                    args->doc_root[strlen(args->doc_root) - 1] = 0;
+                }
+                break;
+            case 'h':
+                args->is_help = 1;
+                return args;
+                break;
+            default:
+                free(args);
+                return NULL;
+        }
+    }
+    return args;
+}
+
+static int init_server(arguments *args) {
+    if (evthread_use_pthreads() == -1) {
+//        TODO: print error
+        return -1;
+    }
+    signal(SIGINT, int_handler);
+
     struct evconnlistener* listener;
     struct sockaddr_in sin;
-    int port = 80;
-
-    thread_pool* thpool = thread_pool_init(1);
 
     base = event_base_new();
     if (!base) {
 //        cout << "Error while creating event base" << endl;
+//        TODO: print error
         return -1;
     }
+
+    thread_pool* thpool = thread_pool_init(args->ncpu, args->doc_root);
 
     memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(INADDR_ANY);
-    sin.sin_port = htons(port);
+    sin.sin_port = htons(args->port);
 
     listener = evconnlistener_new_bind(base, accept_connection_cb, (void*)thpool, (LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE),
                                        100, (struct sockaddr*) &sin, sizeof(sin));
 
     if (!listener) {
 //        cout << "Error while creating listener" << endl;
+//        TODO: print error
         return -1;
     }
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
-//    cout << "starting dispatch" << endl;
-    event_base_dispatch(base);
-//    cout << "end end end" << endl;
 
+    event_base_dispatch(base);
+//    printf("now back to main\n");
+    evconnlistener_free(listener);
+    thread_pool_destroy(thpool);
+    event_base_free(base);
     return 0;
 }
 
 static void accept_connection_cb(struct evconnlistener* listener, evutil_socket_t fd, struct sockaddr* addr, int sock_len, void* thpool) {
     struct event_base* base = evconnlistener_get_base(listener);
     struct bufferevent* buf_ev = bufferevent_socket_new(base, fd, (BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE));
-//    cout << "connection callback" << endl;
-//    bufferevent_enable(buf_ev, (EV_READ));
 
     thread_pool_add_work(thpool, buf_ev, JOB_TYPE_NEW);
-
-
-//    bufferevent_setcb(buf_ev, echo_read_cb, echo_write_cb, echo_event_cb, thpool);
-//    bufferevent_enable(buf_ev, (EV_READ));
 }
 
 static void accept_error_cb(struct evconnlistener* listener, void* arg) {
@@ -81,25 +143,8 @@ static void accept_error_cb(struct evconnlistener* listener, void* arg) {
     event_base_loopexit(base, NULL);
 }
 
-//static void echo_write_cb(struct bufferevent *buf_ev, void *thpool) {
-//    bufferevent_free(buf_ev);
-//}
-//
-//static void echo_read_cb(struct bufferevent* buf_ev, void* thpool) {
-//    struct evbuffer* buf_input = bufferevent_get_input(buf_ev);
-//    struct evbuffer* buf_output = bufferevent_get_output(buf_ev);
-//
-//    thread_pool_add_work((thread_pool*)thpool, bufferevent_get_input(buf_ev), bufferevent_get_output(buf_ev));
-//
-////    evbuffer_add_buffer(buf_output, buf_input);
-////    cout << "echo read callback" << endl;
-//}
-//
-//static void echo_event_cb(struct bufferevent* buf_ev, short events, void* arg) {
-//    if (events & BEV_EVENT_ERROR)
-//        perror("Error bufferevent");
-//    if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR))
-//        bufferevent_free(buf_ev);
-//
-////    cout << "echo event callback" << endl;
-//}
+static void int_handler(int sig) {
+//    printf("i'm a SIGINT handler!\n");
+    event_base_loopexit(base, NULL);
+//    printf("loop's broken!\n");
+}

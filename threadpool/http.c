@@ -2,9 +2,6 @@
 // Created by an.pavlov on 15.10.15.
 //
 
-// TODO: content type
-// TODO: head request
-
 #include "http.h"
 #include <string.h>
 #include <fcntl.h>
@@ -13,8 +10,8 @@
 #include <time.h>
 #include <stdio.h>
 
-#define DOC_ROOT "/home/orange/apginx_root"
-#define DOC_ROOT_LEN 24
+//#define DOC_ROOT "/home/orange/apginx_root"
+//#define DOC_ROOT_LEN 24
 #define DOC_INDEX "index.html"
 #define DOC_INDEX_LEN 10
 
@@ -26,6 +23,8 @@
 typedef struct response_info {
     char *path;
     const char *type;
+    char *doc_root;
+    int doc_root_len;
     int method;
     int size;
 } response_info;
@@ -42,7 +41,7 @@ static void add_headers(struct evbuffer *buf, char *code, const char *type, int 
 static void handle_get(response_info *resp, struct evbuffer *buf);
 static void handle_head(response_info *resp, struct evbuffer *writebuf);
 
-void handle_request(struct evbuffer *buf, char *line) {
+void handle_request(struct evbuffer *buf, char *line, char *doc_root, int doc_root_len) {
     response_info *resp = resp_init(line);
     if (resp->method == PARSE_LINE_RET_BAD) {
         add_headers(buf, "400 Bad Request", "text/html", 24);
@@ -50,6 +49,9 @@ void handle_request(struct evbuffer *buf, char *line) {
         free(resp);
         return;
     }
+
+    resp->doc_root = doc_root;
+    resp->doc_root_len = doc_root_len;
 
     file_info(resp);
     if (resp->size == -1) {
@@ -101,7 +103,7 @@ static response_info *resp_init(char *line) {
     }
 
     char *protocol = strtok(NULL, " ");
-    if (protocol == NULL || strcmp(protocol, "HTTP/1.1") != 0 && strcmp(protocol, "HTTP/1.0")) {
+    if (protocol == NULL || (strcmp(protocol, "HTTP/1.1") != 0 && strcmp(protocol, "HTTP/1.0"))) {
         resp->method = PARSE_LINE_RET_BAD;
         return resp;
     }
@@ -162,6 +164,8 @@ static const char *guess_type(char *path, size_t len) {
         return "text/html";
     } else if (strcmp(ending - 4, ".css") == 0) {
         return "text/css";
+    } else if (strcmp(ending - 4, ".txt") == 0) {
+        return "text/plain";
     } else if (strcmp(ending - 3, ".js") == 0) {
         return "application/javascript";
     } else if (strcmp(ending - 4, ".png") == 0) {
@@ -187,12 +191,12 @@ static void file_info(response_info *resp) {
     char *decoded = (char*)malloc(len + 1);
     len = decode(resp->path, len, decoded);
 
-    len += DOC_ROOT_LEN;
+    len += resp->doc_root_len;
     if (is_folder == 1) {
         len += DOC_INDEX_LEN;
     }
     char *fullpath = (char*)malloc(len + 100);
-    strcpy(fullpath, DOC_ROOT);
+    strcpy(fullpath, resp->doc_root);
     strcat(fullpath, decoded);
     if (is_folder == 1) {
         strcat(fullpath, DOC_INDEX);

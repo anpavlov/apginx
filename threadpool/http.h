@@ -7,6 +7,6 @@
 
 #include <event2/buffer.h>
 
-void handle_request(struct evbuffer *buf, char *line);
+void handle_request(struct evbuffer *buf, char *line, char *doc_root, int doc_root_len);
 
 #endif //APGINX_HTTP_H

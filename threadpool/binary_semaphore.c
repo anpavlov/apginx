@@ -39,3 +39,10 @@ void bin_sem_wait(bin_sem *bsem) {
     bsem->value = 0;
     pthread_mutex_unlock(&bsem->mutex);
 }
+
+void bin_sem_post_all(bin_sem* bsem) {
+    pthread_mutex_lock(&bsem->mutex);
+    bsem->value = 1;
+    pthread_cond_broadcast(&bsem->condition);
+    pthread_mutex_unlock(&bsem->mutex);
+}

@@ -7,6 +7,8 @@
 #include "http.h"
 #include <stdlib.h>
 #include <event2/event.h>
+#include <unistd.h>
+#include <string.h>
 
 #include "thread_pool.h"
 
@@ -14,7 +16,8 @@ struct thread_ {
 //    int id;
     pthread_t pthread;
     thread_pool *thpool;
-    long long count;
+    char *doc_root;
+//    long long count;
 };
 
 struct job_queue_ {
@@ -27,8 +30,9 @@ struct job_queue_ {
 
 static int threads_alive;
 
-static int thread_init(thread_pool *thpool, int id);
+static int thread_init(thread_pool *thpool, int id, char *doc_root);
 static void thread_do(thread *thrd);
+static void thread_destroy(thread *thrd);
 
 //static int write_file(char *filepath, struct evbuffer *writebuf);
 //static int write_header(char *filepath, struct evbuffer *writebuf);
@@ -42,12 +46,12 @@ static int job_queue_init(thread_pool *thpool);
 //void job_queue_clear(thread_pool* thpool);
 static void job_queue_push(thread_pool *thpool, job *newjob);
 static job* job_queue_pull(thread_pool *thpool);
-//void job_queue_destroy(thread_pool* thpool);
+static void job_queue_destroy(thread_pool* thpool);
 
 
 // =========== THREAD POOL ==============
 
-thread_pool *thread_pool_init(int num_threads) {
+thread_pool *thread_pool_init(int num_threads, char *doc_root) {
     threads_alive = 1;
 
     if (num_threads < 0) {
@@ -81,7 +85,7 @@ thread_pool *thread_pool_init(int num_threads) {
 
     int i, ret;
     for (i = 0; i < num_threads; ++i) {
-        ret = thread_init(thpool, i);
+        ret = thread_init(thpool, i, doc_root);
         if (ret != 0) {
 //            cant allocate
             return NULL;
@@ -111,9 +115,31 @@ int thread_pool_add_work(thread_pool *thpool, struct bufferevent *incoming_bufev
     return 0;
 }
 
+void thread_pool_destroy(thread_pool* thpool) {
+    volatile int threads_total = thpool->num_threads_alive;
+
+    threads_alive = 0;
+
+    while (thpool->num_threads_alive) {
+        bin_sem_post_all(thpool->queue->has_jobs);
+//        sleep(1);
+    }
+
+    job_queue_destroy(thpool);
+    free(thpool->queue);
+
+    int i;
+    for (i = 0; i < threads_total; ++i) {
+        thread_destroy(thpool->threads[i]);
+    }
+
+    free(thpool->threads);
+    free(thpool);
+}
+
 // =========== THREADS ==============
 
-int thread_init(thread_pool *thpool, int id) {
+int thread_init(thread_pool *thpool, int id, char *doc_root) {
     thread *curthread = (thread*)malloc(sizeof(thread));
     if (!curthread) {
 //        cant allocate
@@ -122,7 +148,8 @@ int thread_init(thread_pool *thpool, int id) {
     thpool->threads[id] = curthread;
 
     curthread->thpool = thpool;
-    curthread->count = 0;
+    curthread->doc_root = doc_root;
+//    curthread->count = 0;
 
     pthread_create(&curthread->pthread, NULL, (void*)thread_do, curthread);
     pthread_detach(curthread->pthread);
@@ -136,6 +163,9 @@ void thread_do(thread *thrd) {
     pthread_mutex_lock(&thpool->thread_count_mutex);
     ++thpool->num_threads_alive;
     pthread_mutex_unlock(&thpool->thread_count_mutex);
+
+    char *doc_root = thrd->doc_root;
+    int doc_root_len = (int)strlen(doc_root);
 
     while (threads_alive) {
         bin_sem_wait(thpool->queue->has_jobs);
@@ -167,7 +197,7 @@ void thread_do(thread *thrd) {
                         struct evbuffer *tempbuf = evbuffer_new();
 //                        evbuffer_add_printf(buf_output, "HTTP/1.1 200 OK\n");
 
-                        handle_request(tempbuf, line);
+                        handle_request(tempbuf, line, doc_root, doc_root_len);
 
                         evbuffer_add_buffer(buf_output, tempbuf);
                         bufferevent_unlock(curjob->bufev);
@@ -182,13 +212,17 @@ void thread_do(thread *thrd) {
 
                 free(curjob);
             }
-            ++thrd->count;
+//            ++thrd->count;
         }
     }
 
     pthread_mutex_lock(&thpool->thread_count_mutex);
     --thpool->num_threads_alive;
     pthread_mutex_unlock(&thpool->thread_count_mutex);
+}
+
+static void thread_destroy(thread *thrd) {
+    free(thrd);
 }
 
 // =========== JOB QUEUE ==============
@@ -254,6 +288,13 @@ job *job_queue_pull(thread_pool *thpool) {
     }
 
     return pulledjob;
+}
+
+static void job_queue_destroy(thread_pool* thpool) {
+    while (thpool->queue->length) {
+        free(job_queue_pull(thpool));
+    }
+    free(thpool->queue->has_jobs);
 }
 
 // =========== CALLBACKS ==============

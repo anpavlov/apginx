@@ -20,8 +20,9 @@ struct thread_pool_ {
     job_queue* queue;
 };
 
-thread_pool* thread_pool_init(int num_threads);
+thread_pool* thread_pool_init(int num_threads, char *doc_root);
 int thread_pool_add_work(thread_pool* thpool, struct bufferevent *incoming_bufev, int type);
+void thread_pool_destroy(thread_pool* thpool);
 
 
 #endif //APGINX_THREAD_POOL_H
