@@ -10,9 +10,17 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include <errno.h>
+#include <stdio.h>
 
 #include "threadpool/thread_pool.h"
 #include "threadpool/job.h"
+
+static const char *help_string = "Using: httpd [OPTION]...\n\n"
+        "  -r\t\t\tDocument root DEFAULT: ./\n"
+        "  -c\t\t\tAmount of workers (1-65535) DEFAULT: 4\n"
+        "  -p\t\t\tPort number (1-65535) DEFAULT: 80\n"
+        "  -h\t\t\tShow this message\n";
 
 typedef struct arguments {
     int port;
@@ -33,19 +41,19 @@ static struct event_base* base;
 int main(int argc, char **argv) {
     arguments *args = parse_args(argc, argv);
     if (!args) {
-//       TODO: print wrong parameters and suggest help
+        printf("Wrong options! Use -h to show help\n");
         return 0;
     }
     if (args->is_help == 1) {
-//       TODO: print help
+        printf("%s", help_string);
         return 0;
     }
     if (args->port < 1 || args->port > 65535) {
-//        TODO: print error
+        printf("Wrong port number! Use -h to show help\n");
         return 0;
     }
     if (args->ncpu < 1 || args->ncpu > 65535) {
-//        TODO: print error
+        printf("Wrong cpu amount! Use -h to show help\n");
         return 0;
     }
     return init_server(args);
@@ -60,7 +68,7 @@ static arguments *parse_args(int argc, char **argv) {
 
     opterr = 0;
     int res = 0;
-    while ((res = getopt(argc, argv, "p:c:r:")) != -1) {
+    while ((res = getopt(argc, argv, "p:c:r:h")) != -1) {
         switch (res) {
             case 'p':
                 args->port = atoi(optarg);
@@ -77,7 +85,6 @@ static arguments *parse_args(int argc, char **argv) {
             case 'h':
                 args->is_help = 1;
                 return args;
-                break;
             default:
                 free(args);
                 return NULL;
@@ -87,8 +94,10 @@ static arguments *parse_args(int argc, char **argv) {
 }
 
 static int init_server(arguments *args) {
+    printf("Starting server...\n");
+
     if (evthread_use_pthreads() == -1) {
-//        TODO: print error
+        printf("Error occured while turning on pthreads using\n");
         return -1;
     }
     signal(SIGINT, int_handler);
@@ -98,31 +107,31 @@ static int init_server(arguments *args) {
 
     base = event_base_new();
     if (!base) {
-//        cout << "Error while creating event base" << endl;
-//        TODO: print error
+        printf("Error while creating event base\n");
+        free(args);
         return -1;
     }
 
     thread_pool* thpool = thread_pool_init(args->ncpu, args->doc_root);
-
     memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(INADDR_ANY);
-    sin.sin_port = htons(args->port);
+    sin.sin_port = htons((unsigned short)args->port);
 
     listener = evconnlistener_new_bind(base, accept_connection_cb, (void*)thpool, (LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE),
-                                       100, (struct sockaddr*) &sin, sizeof(sin));
+                                       -1, (struct sockaddr*) &sin, sizeof(sin));
 
     if (!listener) {
-//        cout << "Error while creating listener" << endl;
-//        TODO: print error
+        printf("Error while creating listener\n");
+        free(args);
+        thread_pool_destroy(thpool);
+        event_base_free(base);
         return -1;
     }
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
-
+    printf("Server is running\nUse Ctrl+C to stop server\n");
     event_base_dispatch(base);
-//    printf("now back to main\n");
     evconnlistener_free(listener);
     thread_pool_destroy(thpool);
     event_base_free(base);
@@ -138,13 +147,12 @@ static void accept_connection_cb(struct evconnlistener* listener, evutil_socket_
 
 static void accept_error_cb(struct evconnlistener* listener, void* arg) {
     struct event_base* base = evconnlistener_get_base(listener);
-//    int error = EVUTIL_SOCKET_ERROR();
-//    cout << "Erorr " << error << " (" << evutil_socket_error_to_string(error) <<"). Quiting" << endl;
+    int error = EVUTIL_SOCKET_ERROR();
+    printf("Error %d (%s). Shutting down...", error, evutil_socket_error_to_string(error));
     event_base_loopexit(base, NULL);
 }
 
 static void int_handler(int sig) {
-//    printf("i'm a SIGINT handler!\n");
+    printf("\nShutting down...\n");
     event_base_loopexit(base, NULL);
-//    printf("loop's broken!\n");
 }
