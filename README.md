@@ -1,7 +1,9 @@
 # apginx
+Web server for static content
 ## Dependencies
 * libevent
 * pthread
-## Installation
+
+## Compilation
 run `cmake`
 then `make`
