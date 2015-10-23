@@ -1,6 +1,7 @@
 # apginx
-Dependencies
-libevent, pthread
-Installation
-run cmake
-then make
+## Dependencies
+* libevent
+* pthread
+## Installation
+run `cmake`
+then `make`
