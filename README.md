@@ -4,6 +4,6 @@ Web server for static content
 * libevent
 * pthread
 
-## Installation
+## Compilation
 run `cmake`
 then `make`
