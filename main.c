@@ -11,7 +11,6 @@
 #include <signal.h>
 #include <unistd.h>
 #include <errno.h>
-#include <stdio.h>
 
 #include "threadpool/thread_pool.h"
 #include "threadpool/job.h"
@@ -121,9 +120,10 @@ static int init_server(arguments *args) {
     listener = evconnlistener_new_bind(base, accept_connection_cb, (void*)thpool, (LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE),
                                        -1, (struct sockaddr*) &sin, sizeof(sin));
 
+    free(args);
+
     if (!listener) {
         printf("Error while creating listener\n");
-        free(args);
         thread_pool_destroy(thpool);
         event_base_free(base);
         return -1;
@@ -132,6 +132,7 @@ static int init_server(arguments *args) {
 
     printf("Server is running\nUse Ctrl+C to stop server\n");
     event_base_dispatch(base);
+
     evconnlistener_free(listener);
     thread_pool_destroy(thpool);
     event_base_free(base);
