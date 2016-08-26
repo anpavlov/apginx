@@ -55,12 +55,19 @@ int main(int argc, char **argv) {
         printf("Wrong cpu amount! Use -h to show help\n");
         return 0;
     }
-    return init_server(args);
+
+    pthread_t t1, t2;
+    pthread_create(&t1, NULL, (void*)init_server, args);
+    pthread_join(t1, NULL);
+//    pthread_create(&t2, NULL, (void*)init_server, args);
+//    pthread_join(t2, NULL);
+//    init_server(args);
+    return 0;
 }
 
 static arguments *parse_args(int argc, char **argv) {
     arguments *args = (arguments*)malloc(sizeof(arguments));
-    args->port = 80;
+    args->port = 8080;
     args->ncpu = 4;
     args->doc_root = ".";
     args->is_help = 0;
